@@ -1,6 +1,7 @@
 requests:
 
   - method: POST
+    
     url: http://localhost:8080
     data:
       - input: label
@@ -19,3 +20,13 @@ requests:
       - input: label
         key: mountpoint
         replace_with: mountpoint_sub
+
+
+  - method: TELEGRAM
+    api_token: ""
+    chat_id: ""
+    data:
+      - input: label
+        message: "This is a templated messages and this is how you use variables in it: %instance%"
+      - input: annotation
+        message: "This is another templated messages and this is how you use variables in it: %device%"
