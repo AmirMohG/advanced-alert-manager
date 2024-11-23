@@ -2,7 +2,9 @@ from flask import Flask, request, jsonify
 import requests
 import yaml
 import os
-import re
+import json
+from collections import defaultdict
+from time import time
 
 app = Flask(__name__)
 
@@ -16,88 +18,104 @@ def load_config():
 
 config = load_config()
 
-# Send message to Telegram
+# Track resource alerts
+resource_tracking = defaultdict(lambda: {"count": 0, "timestamps": []})
+
+# Send a POST request
+def send_post_request(url, payload):
+    response = requests.post(url, json=payload)
+    return response
+
+# Send a Telegram message
 def send_telegram_message(api_token, chat_id, message):
     telegram_url = f"https://api.telegram.org/bot{api_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message}
     response = requests.post(telegram_url, json=payload)
     return response
 
-# Parse and replace variables in message templates
-def parse_and_replace(message_template, source):
-    # Find all placeholders in the template (e.g., %variable%)
-    variables = re.findall(r"%(\w+)%", message_template)
+# Convert labels to a unique string key
+def get_resource_key(labels):
+    return json.dumps(labels, sort_keys=True)  # Sort keys to ensure consistent order
 
-    # Replace each placeholder with its value from the source
-    for var in variables:
-        value = source.get(var, f"<missing:{var}>")  # Use "<missing:var>" if key is not found
-        message_template = message_template.replace(f"%{var}%", value)
-
-    return message_template
-
-# Process JSON and send HTTP requests or Telegram messages based on config
-def process_json_and_send_requests(input_json, config):
+# Process the incoming alert
+def process_alert(input_json, config):
     responses = []
 
     for request_config in config["requests"]:
         method = request_config["method"].upper()
         url = request_config.get("url")
+        repeat = request_config.get("repeat", 1)  # Default repeat is 1
+        interval = request_config.get("interval", 60)  # Default interval is 60 seconds
         data_mappings = request_config["data"]
 
         # Telegram-specific configurations
         if method == "TELEGRAM":
             api_token = request_config.get("api_token")
             chat_id = request_config.get("chat_id")
-
             if not api_token or not chat_id:
                 raise ValueError("TELEGRAM method requires 'api_token' and 'chat_id' in config.")
 
         for item in input_json:
-            for mapping in data_mappings:
-                input_type = mapping["input"]
-                message_template = mapping.get("message")
-                source = item.get(input_type + "s", {})  # Use 'labels' or 'annotations'
+            # Get the unique resource key
+            resource_key = get_resource_key(item["labels"])
+            current_time = time()
+            
+            # Update tracking for the resource
+            resource_data = resource_tracking[resource_key]
+            resource_data["timestamps"].append(current_time)
 
-                if method == "TELEGRAM" and message_template:
-                    # Parse and replace variables in the message template
-                    message = parse_and_replace(message_template, source)
-                    response = send_telegram_message(api_token, chat_id, message)
-                    responses.append({
-                        "method": method,
-                        "status_code": response.status_code,
-                        "response_body": response.text,
-                        "sent_data": {"message": message}
-                    })
+            # Remove timestamps older than the interval
+            resource_data["timestamps"] = [
+                ts for ts in resource_data["timestamps"] if current_time - ts <= interval
+            ]
 
-                elif method in ["POST", "GET"]:
-                    # Handle POST and GET methods as usual
+            # Update count and check if it meets the repeat threshold
+            resource_data["count"] = len(resource_data["timestamps"])
+
+            if resource_data["count"] >= repeat:
+                # Perform the action based on the method
+                for mapping in data_mappings:
+                    input_type = mapping["input"]
                     key = mapping.get("key")
                     replace_with = mapping.get("replace_with")
+                    message_template = mapping.get("message")
+                    source = item.get(input_type + "s", {})  # Use 'labels' or 'annotations'
 
-                    if key in source:
-                        original_value = source[key]
-
-                        if replace_with:
-                            source[replace_with] = original_value
-                            del source[key]
-
-                        if method == "POST":
-                            request_body = {replace_with: original_value}
-                            response = requests.post(url, json=request_body)
-                        elif method == "GET":
-                            params = {replace_with: original_value}
-                            response = requests.get(url, params=params)
-
+                    if method == "TELEGRAM" and message_template:
+                        # Parse and replace variables in the message template
+                        message = message_template
+                        for placeholder, value in source.items():
+                            message = message.replace(f"%{placeholder}%", value)
+                        response = send_telegram_message(api_token, chat_id, message)
                         responses.append({
                             "method": method,
-                            "url": url,
                             "status_code": response.status_code,
                             "response_body": response.text,
-                            "sent_data": {
-                                "key": replace_with,
-                                "original_value": original_value
-                            }
+                            "sent_data": {"message": message}
                         })
+                    elif method in ["POST", "GET"]:
+                        if key in source:
+                            original_value = source[key]
+                            if replace_with:
+                                source[replace_with] = original_value
+                                del source[key]
+                            if method == "POST":
+                                response = send_post_request(url, source)
+                            elif method == "GET":
+                                response = requests.get(url, params=source)
+                            responses.append({
+                                "method": method,
+                                "url": url,
+                                "status_code": response.status_code,
+                                "response_body": response.text,
+                                "sent_data": {
+                                    "key": replace_with,
+                                    "original_value": original_value
+                                }
+                            })
+
+                # Reset count and timestamps after triggering the action
+                resource_tracking[resource_key] = {"count": 0, "timestamps": []}
 
     return responses
 
@@ -110,13 +128,13 @@ def process_route():
             return jsonify({"error": "Invalid JSON payload"}), 400
 
         # Process the JSON and send requests/messages
-        results = process_json_and_send_requests(input_json, config)
+        results = process_alert(input_json, config)
         return jsonify({"results": results}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Helper route to debug incoming data
+# Debugging route to inspect data
 @app.route("/", methods=["POST", "GET"])
 def printer():
     print(request.json)
