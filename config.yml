@@ -1,0 +1,24 @@
+requests:
+
+- method: POST
+  url: https://x.com
+  data:
+    - input: label
+      key: device
+      replace_with: device_sub
+    - input: annotation
+      key: phone_number
+      replace_with: phone_number_sub
+
+- method: GET
+  url: https://x.com
+  data:
+    - input: annotation
+      key: instance
+      replace_with: instance_sub
+    - input: label
+      key: mountpoint
+      replace_with: mountpoint_sub
+
+
+
