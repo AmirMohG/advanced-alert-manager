@@ -28,6 +28,7 @@ requests:
   - method: TELEGRAM
     interval: 60
     repeat: 3
+    api_url: api.telegram.org
     api_token: ""
     chat_id: ""
     data:
