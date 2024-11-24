@@ -3,7 +3,8 @@ requests:
   - method: POST
     interval: 60
     repeat: 2
-    url: http://localhost:8080
+    sleep: 5
+    url: http://127.0.0.1:8080
     data:
       - input: label
         key: device
@@ -13,7 +14,7 @@ requests:
         replace_with: phone_number_sub
 
   - method: GET
-    url: http://localhost:8080
+    url: http://127.0.0.1:8080
     interval: 60
     repeat: 4
     data:

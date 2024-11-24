@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 # Load config from config.yml
 def load_config():
-    config_path = os.path.join(os.getcwd(), "my.yml")
+    config_path = os.path.join(os.getcwd(), "config.yml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found at {config_path}")
     with open(config_path, "r") as f:
@@ -47,12 +47,12 @@ def process_alert(input_json, config):
         repeat = request_config.get("repeat", 1)  # Default repeat is 1
         interval = request_config.get("interval", 60)  # Default interval is 60 seconds
         data_mappings = request_config["data"]
-
+        api_token = request_config.get("api_token")
+        chat_id = request_config.get("chat_id")
+        api_url = request_config.get("api_url")
         # Telegram-specific configurations
         if method == "TELEGRAM":
-            api_token = request_config.get("api_token")
-            chat_id = request_config.get("chat_id")
-            api_url = request_config.get("api_url")
+            
             if not api_token or not chat_id:
                 raise ValueError("TELEGRAM method requires 'api_token' and 'chat_id' in config.")
             if not api_url:
@@ -138,21 +138,27 @@ def process_route():
         return jsonify({"error": str(e)}), 500
 
 
+from time import time
+from collections import defaultdict
+
+# Global tracker for resources
+resource_tracking = defaultdict(lambda: {"count": 0, "timestamps": [], "last_sent": 0})
+
 def process_alert(input_json, config):
     responses = []
     
-
     for request_config in config["requests"]:
-        api_token = request_config.get("api_token")
-        chat_id = request_config.get("chat_id")
         method = request_config["method"].upper()
         url = request_config.get("url")
         repeat = request_config.get("repeat", 1)  # Default repeat is 1
         interval = request_config.get("interval", 60)  # Default interval is 60 seconds
+        sleep = request_config.get("sleep", 0)  # Default sleep is 0 seconds
         data_mappings = request_config["data"]
-
+        api_token = request_config.get("api_token")
+        chat_id = request_config.get("chat_id")
         # Telegram-specific configurations
         if method == "TELEGRAM":
+           
             
             if not api_token or not chat_id:
                 raise ValueError("TELEGRAM method requires 'api_token' and 'chat_id' in config.")
@@ -171,17 +177,25 @@ def process_alert(input_json, config):
                 ts for ts in resource_data["timestamps"] if current_time - ts <= interval
             ]
 
-            # Update count and check repeat threshold
+            # Update count
             resource_data["count"] = len(resource_data["timestamps"])
+
+            # Check if the repeat condition is met
             if resource_data["count"] >= repeat:
-                # Trigger action and record responses
+                # Check if the last sent time is within the sleep interval
+                if current_time - resource_data["last_sent"] < sleep:
+                    continue  # Ignore this alert since it's within the sleep interval
+
+                # Trigger the action and record responses
                 response = perform_action(method, url, data_mappings, item, api_token, chat_id)
                 responses.extend(response)
 
-                # Reset count and timestamps after the action is triggered
-                resource_tracking[resource_key] = {"count": 0, "timestamps": []}
+                # Update the last sent time and reset the count/timestamps for the resource
+                resource_data["last_sent"] = current_time
+                resource_tracking[resource_key] = {"count": 0, "timestamps": [], "last_sent": current_time}
 
     return responses
+
 # Debugging route to inspect data
 def perform_action(method, url, data_mappings, item, api_token, chat_id):
     responses = []
