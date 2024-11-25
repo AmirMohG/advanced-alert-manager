@@ -16,7 +16,14 @@ requests:
   - method: GET
     url: http://127.0.0.1:8080
     interval: 60
-    repeat: 4
+    sleep: 1
+    repeat: 1
+    conditions:
+      - type: label
+        operator: equals
+        key: "severity"
+        value: "critical"
+
     data:
       - input: annotation
         key: instance
@@ -27,6 +34,11 @@ requests:
 
 
   - method: TELEGRAM
+    conditions:
+      - type: label
+        operator: equals
+        key: alert
+        value: telegram
     interval: 60
     repeat: 3
     api_url: api.telegram.org
