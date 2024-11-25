@@ -16,6 +16,9 @@ def load_config():
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
+def logger(message):
+    print(f"[LOG] {message}")
+
 config = load_config()
 
 # Track resource alerts
@@ -129,6 +132,7 @@ def process_alert(input_json, config):
         for item in input_json:
             # Evaluate conditions before proceeding
             if conditions and not evaluate_conditions(item, conditions):
+                logger(f"Message discarded: Conditions not met for alert {item['labels']}")
                 continue  # Skip this request if conditions are not met
 
             # Get the unique resource key
@@ -154,18 +158,28 @@ def process_alert(input_json, config):
             resource_data["count"] = len(resource_data["timestamps"])
 
             # Check if the repeat condition is met
-            if resource_data["count"] >= repeat:
-                # Check if the last sent time is within the sleep interval
-                if current_time - resource_data["last_sent"] < sleep:
-                    continue  # Ignore this alert since it's within the sleep interval
+            if resource_data["count"] < repeat:
+                logger(
+                    f"Message discarded: Repeat condition not met for alert {item['labels']} "
+                    f"(Current count: {resource_data['count']}, Required: {repeat})"
+                )
+                continue
 
-                # Trigger the action and record responses
-                response = perform_action(method, url, data_mappings, item, api_token=None, chat_id=None)
-                responses.extend(response)
+            # Check if the last sent time is within the sleep interval
+            if current_time - resource_data["last_sent"] < sleep:
+                logger(
+                    f"Message discarded: Sleep condition not met for alert {item['labels']} "
+                    f"(Last sent: {resource_data['last_sent']}, Sleep interval: {sleep}s)"
+                )
+                continue
 
-                # Update the last sent time and reset the count/timestamps for the resource
-                resource_data["last_sent"] = current_time
-                resource_tracking[resource_key] = {"count": 0, "timestamps": [], "last_sent": current_time}
+            # Trigger the action and record responses
+            response = perform_action(method, url, data_mappings, item, api_token=None, chat_id=None)
+            responses.extend(response)
+
+            # Update the last sent time and reset the count/timestamps for the resource
+            resource_data["last_sent"] = current_time
+            resource_tracking[resource_key] = {"count": 0, "timestamps": [], "last_sent": current_time}
 
     return responses
 

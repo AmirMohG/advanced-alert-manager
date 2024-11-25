@@ -1,22 +1,22 @@
 requests:
 
-  - method: POST
-    interval: 60
-    repeat: 2
-    sleep: 5
-    url: http://127.0.0.1:8080
-    data:
-      - input: label
-        key: device
-        replace_with: device_sub
-      - input: annotation
-        key: phone_number
-        replace_with: phone_number_sub
+  # - method: POST
+  #   interval: 60
+  #   repeat: 2
+  #   sleep: 5
+  #   url: http://127.0.0.1:8080
+  #   data:
+  #     - input: label
+  #       key: device
+  #       replace_with: device_sub
+  #     - input: annotation
+  #       key: phone_number
+  #       replace_with: phone_number_sub
 
   - method: GET
     url: http://127.0.0.1:8080
     interval: 60
-    sleep: 1
+    sleep: 5m
     repeat: 1
     conditions:
       - type: label
@@ -33,19 +33,19 @@ requests:
         replace_with: mountpoint_sub
 
 
-  - method: TELEGRAM
-    conditions:
-      - type: label
-        operator: equals
-        key: alert
-        value: telegram
-    interval: 60
-    repeat: 3
-    api_url: api.telegram.org
-    api_token: ""
-    chat_id: ""
-    data:
-      - input: label
-        message: "This is a templated messages and this is how you use variables in it: %instance%"
-      - input: annotation
-        message: "This is another templated messages and this is how you use variables in it: %device%"
+  # - method: TELEGRAM
+  #   conditions:
+  #     - type: label
+  #       operator: equals
+  #       key: alert
+  #       value: telegram
+  #   interval: 60
+  #   repeat: 3
+  #   api_url: api.telegram.org
+  #   api_token: ""
+  #   chat_id: ""
+  #   data:
+  #     - input: label
+  #       message: "This is a templated messages and this is how you use variables in it: %instance%"
+  #     - input: annotation
+  #       message: "This is another templated messages and this is how you use variables in it: %device%"
