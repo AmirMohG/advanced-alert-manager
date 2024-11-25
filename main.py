@@ -119,7 +119,6 @@ resource_tracking = defaultdict(lambda: {"count": 0, "timestamps": [], "last_sen
 # Process the incoming alert
 def process_alert(input_json, config):
     responses = []
-
     for request_config in config["requests"]:
         method = request_config["method"].upper()
         url = request_config.get("url")
@@ -128,7 +127,8 @@ def process_alert(input_json, config):
         sleep = parse_time(request_config.get("sleep", "0"))
         conditions = request_config.get("conditions", [])
         data_mappings = request_config["data"]
-
+        api_token = request_config.get("api_token")
+        chat_id = request_config.get("chat_id")
         for item in input_json:
             # Evaluate conditions before proceeding
             if conditions and not evaluate_conditions(item, conditions):
@@ -174,7 +174,8 @@ def process_alert(input_json, config):
                 continue
 
             # Trigger the action and record responses
-            response = perform_action(method, url, data_mappings, item, api_token=None, chat_id=None)
+            
+            response = perform_action(method, url, data_mappings, item, api_token=api_token, chat_id=chat_id)
             responses.extend(response)
 
             # Update the last sent time and reset the count/timestamps for the resource
